@@ -1,5 +1,4 @@
 # requirements.txt
-discord.py[voice]
-PyNaCl
-python-dotenv
+discord.py-self
 aiohttp
+python-dotenv
