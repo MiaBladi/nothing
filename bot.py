@@ -26,7 +26,7 @@ def load_bot_configs():
         i += 1
     return configs
 
-# ── Keep-alive HTTP server (required for Render free web service) ─────────────
+# ── Keep-alive HTTP server ────────────────────────────────────────────────────
 
 async def handle_ping(request):
     return web.Response(text="OK")
@@ -42,13 +42,10 @@ async def start_http_server():
     await site.start()
     print(f"[HTTP] Keep-alive server running on port {port}")
 
-# ── Bot factory ───────────────────────────────────────────────────────────────
+# ── Self-bot client factory ───────────────────────────────────────────────────
 
 def make_client(cfg):
-    intents = discord.Intents.default()
-    intents.guilds = True
-    intents.voice_states = True
-    client = discord.Client(intents=intents)
+    client = discord.Client()
 
     async def join_channel():
         guild   = client.get_guild(cfg["guild_id"])
@@ -62,12 +59,12 @@ def make_client(cfg):
             self_mute=cfg["self_mute"],
             self_deaf=cfg["self_deaf"]
         )
-        print(f"[BOT {client.user}] Joined #{channel.name} "
+        print(f"[ACCOUNT {client.user}] Joined #{channel.name} "
               f"(mute={cfg['self_mute']}, deaf={cfg['self_deaf']})")
 
     @client.event
     async def on_ready():
-        print(f"[BOT] Online as {client.user}")
+        print(f"[ACCOUNT] Logged in as {client.user}")
         await join_channel()
 
     @client.event
@@ -76,32 +73,35 @@ def make_client(cfg):
         vc    = discord.utils.get(client.voice_clients, guild=guild)
 
         if not vc or not vc.is_connected():
-            print(f"[BOT {client.user}] Disconnected — rejoining in 5s...")
+            print(f"[ACCOUNT {client.user}] Dropped — rejoining in 5s...")
             await asyncio.sleep(5)
             await join_channel()
 
     return client
 
-# ── Per-bot runner with crash recovery ────────────────────────────────────────
+# ── Per-account runner with crash recovery ────────────────────────────────────
 
 async def run_bot(cfg):
     client = make_client(cfg)
     while True:
         try:
             await client.start(cfg["token"])
+        except discord.LoginFailure:
+            print(f"[ACCOUNT] Invalid token — check BOT_{cfg}_TOKEN. Not retrying.")
+            break
         except Exception as e:
-            print(f"[BOT] Crashed: {e} — restarting in 10s...")
-            await asyncio.sleep(10)
+            print(f"[ACCOUNT] Crashed: {e} — restarting in 15s...")
+            await asyncio.sleep(15)
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 async def main():
     configs = load_bot_configs()
     if not configs:
-        print("No bots found in config.env. Add BOT_1_TOKEN, BOT_1_GUILD_ID, etc.")
+        print("No accounts found. Add BOT_1_TOKEN, BOT_1_GUILD_ID, BOT_1_CHANNEL_ID.")
         return
 
-    print(f"Starting {len(configs)} bot(s) + HTTP keep-alive...")
+    print(f"Starting {len(configs)} account(s) + HTTP keep-alive...")
     await asyncio.gather(
         start_http_server(),
         *(run_bot(cfg) for cfg in configs)
