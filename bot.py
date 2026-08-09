@@ -17,7 +17,8 @@ def load_bot_configs():
         if not token:
             break
         configs.append({
-            "token":      token,
+            "index":      i,
+            "token":      token.strip(),
             "guild_id":   int(os.getenv(f"BOT_{i}_GUILD_ID")),
             "channel_id": int(os.getenv(f"BOT_{i}_CHANNEL_ID")),
             "self_mute":  os.getenv(f"BOT_{i}_SELF_MUTE", "TRUE").upper() == "TRUE",
@@ -59,12 +60,12 @@ def make_client(cfg):
             self_mute=cfg["self_mute"],
             self_deaf=cfg["self_deaf"]
         )
-        print(f"[ACCOUNT {client.user}] Joined #{channel.name} "
+        print(f"[ACCOUNT {cfg['index']}] Joined #{channel.name} "
               f"(mute={cfg['self_mute']}, deaf={cfg['self_deaf']})")
 
     @client.event
     async def on_ready():
-        print(f"[ACCOUNT] Logged in as {client.user}")
+        print(f"[ACCOUNT {cfg['index']}] Logged in as {client.user}")
         await join_channel()
 
     @client.event
@@ -73,7 +74,7 @@ def make_client(cfg):
         vc    = discord.utils.get(client.voice_clients, guild=guild)
 
         if not vc or not vc.is_connected():
-            print(f"[ACCOUNT {client.user}] Dropped — rejoining in 5s...")
+            print(f"[ACCOUNT {cfg['index']}] Dropped — rejoining in 5s...")
             await asyncio.sleep(5)
             await join_channel()
 
@@ -82,16 +83,21 @@ def make_client(cfg):
 # ── Per-account runner with crash recovery ────────────────────────────────────
 
 async def run_bot(cfg):
-    client = make_client(cfg)
     while True:
+        client = make_client(cfg)
         try:
             await client.start(cfg["token"])
-        except discord.LoginFailure:
-            print(f"[ACCOUNT] Invalid token — check BOT_{cfg}_TOKEN. Not retrying.")
-            break
-        except Exception as e:
-            print(f"[ACCOUNT] Crashed: {e} — restarting in 15s...")
+        except discord.LoginFailure as e:
+            print(f"[ACCOUNT {cfg['index']}] Login failed: {e} — retrying in 15s...")
             await asyncio.sleep(15)
+        except Exception as e:
+            print(f"[ACCOUNT {cfg['index']}] Crashed: {e} — restarting in 15s...")
+            await asyncio.sleep(15)
+        finally:
+            try:
+                await client.close()
+            except Exception:
+                pass
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
